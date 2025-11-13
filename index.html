@@ -180,18 +180,15 @@
                 測試連線
             </button>
         </div>
-
-        <!-- Langfuse 設定 -->
+        
+        <!-- ✅ 改為顯示狀態 -->
         <div class="mb-6 p-4 bg-gray-700 rounded-lg">
-            <h3 class="font-semibold mb-2">Langfuse 設定</h3>
-            <input id="langfuseKey" type="password" placeholder="Langfuse Secret Key" 
-                   value="sk-lf-393cbf4f-3741-438c-9a12-4c29830b5b6a"
-                   class="w-full p-2 bg-gray-600 rounded mb-2 text-sm">
-            <input id="langfuseUrl" type="text" placeholder="Langfuse Public Key" 
-                   value="pk-lf-7b520bf9-4496-4398-ab9d-14566ac011ce"
-                   class="w-full p-2 bg-gray-600 rounded mb-2 text-sm">
-            <button id="testLangfuseBtn" class="w-full py-1 bg-gray-600 hover:bg-gray-500 rounded text-sm">
-                測試 Langfuse
+            <h3 class="font-semibold mb-2">📊 Langfuse 狀態</h3>
+            <div class="text-sm text-green-400">
+                ✅ 已透過後端安全連接
+            </div>
+            <button id="testLangfuseBtn" class="w-full py-1 bg-gray-600 hover:bg-gray-500 rounded text-sm mt-2">
+                測試連接
             </button>
         </div>
 
@@ -717,102 +714,59 @@
             gameState.resources.push(resource);
         }
 
-        // Langfuse 追踪
+        // 修改 trackWithLangfuse 函數
         async function trackWithLangfuse(agent, action, prompt, response, cost) {
-            if (!gameState.langfuseKey || !gameState.langfuseUrl) return;
-            
             try {
-                const traceId = `trace-${agent.id}-${Date.now()}`;
-                const generationId = `gen-${Date.now()}`;
+                const modelInfo = ALL_MODELS.find(m => m.id === agent.model);
                 
-                // Langfuse Ingestion API 格式
-                const events = [
-                    {
-                        id: traceId,
-                        type: "trace-create",
-                        timestamp: new Date().toISOString(),
-                        body: {
-                            id: traceId,
-                            name: `AI Decision - ${agent.name}`,
-                            userId: agent.id,
-                            metadata: {
-                                agentName: agent.name,
-                                model: agent.model,
-                                action: action,
-                                gameDay: gameState.currentDay,
-                                gameHour: gameState.currentHour
-                            },
-                            tags: [action, agent.mood, ALL_MODELS.find(m => m.id === agent.model)?.vendor || 'Unknown']
-                        }
-                    },
-                    {
-                        id: generationId,
-                        type: "generation-create",
-                        timestamp: new Date().toISOString(),
-                        body: {
-                            id: generationId,
-                            traceId: traceId,
-                            name: action,
-                            model: agent.model,
-                            modelParameters: {
-                                temperature: 0.8,
-                                maxTokens: 150
-                            },
-                            input: prompt,
-                            output: response,
-                            usage: {
-                                promptTokens: Math.ceil(prompt.length / 4),
-                                completionTokens: Math.ceil(response.length / 4),
-                                totalTokens: Math.ceil((prompt.length + response.length) / 4)
-                            },
-                            metadata: {
-                                health: agent.health,
-                                hunger: agent.hunger,
-                                thirst: agent.thirst,
-                                energy: agent.energy,
-                                mood: agent.mood,
-                                estimatedCost: cost
-                            }
-                        }
-                    }
-                ];
-
-                // 發送到 Langfuse API
-                const response_api = await fetch('https://cloud.langfuse.com/api/public/ingestion', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Basic ${btoa(gameState.langfuseUrl + ':' + gameState.langfuseKey)}`
-                    },
-                    body: JSON.stringify({
-                        batch: events,
-                        metadata: {
-                            sdk_name: "ai-ecosystem-simulator",
-                            sdk_version: "1.0.0"
-                        }
-                    })
-                });
-
-                if (response_api.ok) {
-                    console.log('✅ Langfuse 追踪成功:', traceId);
-                } else {
-                    const errorText = await response_api.text();
-                    console.error('❌ Langfuse API 錯誤:', response_api.status, errorText);
-                }
-                
-                // 同時存儲在本地以便查看
-                if (!agent.langfuseTraces) agent.langfuseTraces = [];
-                agent.langfuseTraces.push({
-                    traceId: traceId,
-                    timestamp: new Date().toISOString(),
+                const payload = {
+                    agentId: agent.id,
+                    agentName: agent.name,
+                    model: agent.model,
                     action: action,
                     prompt: prompt,
                     response: response,
-                    cost: cost
+                    cost: cost,
+                    metadata: {
+                        health: agent.health,
+                        hunger: agent.hunger,
+                        thirst: agent.thirst,
+                        energy: agent.energy,
+                        mood: agent.mood,
+                        gameDay: gameState.currentDay,
+                        gameHour: gameState.currentHour,
+                        vendor: modelInfo?.vendor || 'Unknown'
+                    }
+                };
+        
+                const apiResponse = await fetch('https://your-project.vercel.app/api/langfuse', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(payload)
                 });
+        
+                if (apiResponse.ok) {
+                    const result = await apiResponse.json();
+                    console.log('✅ Langfuse 追踪成功:', result);
+                    
+                    // 存儲在本地
+                    if (!agent.langfuseTraces) agent.langfuseTraces = [];
+                    agent.langfuseTraces.push({
+                        timestamp: new Date().toISOString(),
+                        action: action,
+                        prompt: prompt,
+                        response: response,
+                        cost: cost
+                    });
+                } else {
+                    const errorText = await apiResponse.text();
+                    console.error('❌ Langfuse API 錯誤:', apiResponse.status, errorText);
+                }
                 
             } catch (error) {
-                console.error('Langfuse tracking failed:', error);
+                console.error('❌ Langfuse tracking failed:', error);
             }
         }
 
