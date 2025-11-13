@@ -1,0 +1,1502 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI 生態系統 - 真實生存模擬器</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <style>
+        .world-container {
+            position: relative;
+            overflow: hidden;
+            transition: background 3s ease;
+        }
+        
+        .day-sky {
+            background: linear-gradient(to bottom, #87CEEB 0%, #98D8C8 40%, #F7DC6F 60%, #76D7C4 80%, #5DADE2 100%);
+        }
+        
+        .night-sky {
+            background: linear-gradient(to bottom, #0F2027 0%, #203A43 50%, #2C5364 100%);
+        }
+        
+        .terrain-grass {
+            background: radial-gradient(circle at center, #8BC34A, #7CB342);
+        }
+        
+        .terrain-sand {
+            background: radial-gradient(circle at center, #F4E4C1, #D4A574);
+        }
+        
+        .terrain-water {
+            background: radial-gradient(circle at center, #64B5F6, #1976D2);
+            animation: water-wave 3s infinite ease-in-out;
+        }
+        
+        .terrain-forest {
+            background: radial-gradient(circle at center, #43A047, #1B5E20);
+        }
+        
+        .terrain-mountain {
+            background: radial-gradient(circle at center, #9E9E9E, #616161);
+        }
+        
+        @keyframes water-wave {
+            0%, 100% { transform: translateY(0) scale(1); }
+            50% { transform: translateY(-2px) scale(1.01); }
+        }
+        
+        .resource-item {
+            animation: resource-pulse 2s infinite;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .resource-item:hover {
+            transform: scale(1.2);
+        }
+        
+        @keyframes resource-pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+        }
+        
+        .ai-agent {
+            transition: all 0.3s ease;
+            z-index: 20;
+        }
+        
+        .sleeping {
+            animation: sleeping 2s infinite ease-in-out;
+        }
+        
+        @keyframes sleeping {
+            0%, 100% { transform: scale(1) translateY(0); }
+            50% { transform: scale(0.95) translateY(2px); }
+        }
+        
+        .speech-bubble {
+            animation: fadeIn 0.3s ease;
+            max-width: 200px;
+            word-wrap: break-word;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: scale(0.8) translateY(10px); }
+            to { opacity: 1; transform: scale(1) translateY(0); }
+        }
+        
+        .floating-animation {
+            animation: float 4s ease-in-out infinite;
+        }
+        
+        @keyframes float {
+            0%, 100% { transform: translateY(0px) rotate(0deg); }
+            25% { transform: translateY(-5px) rotate(-2deg); }
+            75% { transform: translateY(-5px) rotate(2deg); }
+        }
+        
+        .health-bar {
+            transition: width 0.3s ease;
+        }
+        
+        .day-indicator {
+            transition: all 0.5s ease;
+        }
+        
+        .export-modal {
+            animation: slideIn 0.3s ease;
+        }
+        
+        @keyframes slideIn {
+            from { transform: translateY(-20px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-white min-h-screen">
+    <!-- 控制面板 -->
+    <div class="fixed top-0 left-0 right-0 bg-gray-800 shadow-lg z-50 p-4">
+        <div class="max-w-7xl mx-auto">
+            <div class="flex items-center justify-between mb-2">
+                <h1 class="text-2xl font-bold bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent">
+                    🌍 AI 生態系統 - 真實生存模擬器
+                </h1>
+                <div class="flex gap-4">
+                    <button id="pauseBtn" class="px-4 py-2 bg-yellow-600 hover:bg-yellow-700 rounded-lg transition">
+                        ⏸️ 暫停
+                    </button>
+                    <button id="speedBtn" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg transition">
+                        ⚡ 速度: 1x
+                    </button>
+                    <button id="exportBtn" class="px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg transition">
+                        📊 匯出報告
+                    </button>
+                </div>
+            </div>
+            <!-- 時間顯示 -->
+            <div class="flex items-center gap-4 text-sm">
+                <div class="day-indicator flex items-center gap-2">
+                    <span id="dayIcon">☀️</span>
+                    <span id="timeDisplay">Day 1 - 06:00</span>
+                </div>
+                <div class="text-gray-400">
+                    (1分鐘 = 24小時)
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 側邊欄 - AI 配置 -->
+    <div class="fixed left-0 top-24 bottom-0 w-80 bg-gray-800 shadow-xl z-40 p-4 overflow-y-auto">
+        <h2 class="text-xl font-bold mb-4">🤖 AI 配置</h2>
+        
+        <!-- Stima API 設定 -->
+        <div class="mb-6 p-4 bg-gray-700 rounded-lg">
+            <h3 class="font-semibold mb-2">Stima API 設定</h3>
+            <input id="apiKey" type="password" placeholder="輸入 STIMA API Key" 
+                   class="w-full p-2 bg-gray-600 rounded mb-2 text-sm">
+            <select id="apiMode" class="w-full p-2 bg-gray-600 rounded mb-2">
+                <option value="demo">Demo Mode (無需 API)</option>
+                <option value="stima">Stima API (真實 LLM)</option>
+            </select>
+            <button id="testApiBtn" class="w-full py-1 bg-gray-600 hover:bg-gray-500 rounded text-sm">
+                測試連線
+            </button>
+        </div>
+
+        <!-- 添加 AI Agent -->
+        <div class="mb-6 p-4 bg-gray-700 rounded-lg">
+            <h3 class="font-semibold mb-2">添加 AI Agent</h3>
+            <input id="agentName" type="text" placeholder="Agent 名稱" 
+                   class="w-full p-2 bg-gray-600 rounded mb-2 text-sm">
+            <select id="modelSelect" class="w-full p-2 bg-gray-600 rounded mb-2">
+                <optgroup label="OpenAI">
+                    <option value="gpt-5-2025-08-07">GPT-5 ($0.0072/1K)</option>
+                    <option value="gpt-5-nano-2025-08-07">GPT-5 Nano ($0.00028/1K)</option>
+                </optgroup>
+                <optgroup label="Anthropic">
+                    <option value="claude-sonnet-4-20250514">Claude Sonnet 4 ($0.01/1K)</option>
+                </optgroup>
+                <optgroup label="Google">
+                    <option value="gemini-3-pro-preview-11-2025">Gemini 3 Pro ($0.01/1K)</option>
+                    <option value="gemini-2.5-pro">Gemini 2.5 Pro ($0.005/1K)</option>
+                </optgroup>
+                <optgroup label="xAI">
+                    <option value="grok-3">Grok 3 ($0.028/1K)</option>
+                    <option value="grok-4">Grok 4 ($0.015/1K)</option>
+                </optgroup>
+                <optgroup label="其他">
+                    <option value="phi-4-reasoning-plus">Phi 4 Reasoning ($0.00035/1K)</option>
+                    <option value="deepseek-v3.2-exp">DeepSeek V3.2 ($0.0006/1K)</option>
+                    <option value="mistral-large-2411">Mistral Large ($0.018/1K)</option>
+                </optgroup>
+            </select>
+            <textarea id="agentPersonality" placeholder="個性描述 (可選)" 
+                      class="w-full p-2 bg-gray-600 rounded mb-2 text-sm h-20"></textarea>
+            <button id="addAgentBtn" 
+                    class="w-full py-2 bg-green-600 hover:bg-green-700 rounded transition">
+                ➕ 添加 Agent
+            </button>
+        </div>
+
+        <!-- 現有 Agents -->
+        <div class="mb-6">
+            <h3 class="font-semibold mb-2">🎭 活躍 Agents</h3>
+            <div id="agentsList" class="space-y-2"></div>
+        </div>
+
+        <!-- 統計資訊 -->
+        <div class="p-4 bg-gray-700 rounded-lg">
+            <h3 class="font-semibold mb-2">📊 統計</h3>
+            <div id="stats" class="text-sm space-y-1">
+                <div>總人口: <span id="population">0</span></div>
+                <div>存活: <span id="aliveCount">0</span></div>
+                <div>死亡: <span id="deathCount">0</span></div>
+                <div>互動次數: <span id="interactions">0</span></div>
+                <div>發現數: <span id="discoveries">0</span></div>
+                <div>API 呼叫: <span id="apiCalls">0</span></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 主遊戲區域 -->
+    <div class="ml-80 mt-24 p-4">
+        <div id="worldContainer" class="world-container day-sky rounded-lg shadow-2xl relative"
+             style="width: calc(100vw - 22rem); height: calc(100vh - 8rem); overflow: auto;">
+            
+            <!-- 世界地圖 -->
+            <div id="worldMap" class="relative" style="width: 3000px; height: 2000px;">
+                <!-- 地形將在這裡動態生成 -->
+            </div>
+        </div>
+    </div>
+
+    <!-- 事件日誌 -->
+    <div class="fixed right-0 top-24 bottom-0 w-80 bg-gray-800 shadow-xl z-40 p-4 overflow-y-auto">
+        <h2 class="text-xl font-bold mb-4">📜 事件日誌</h2>
+        <div class="mb-2 flex gap-2">
+            <button class="px-2 py-1 bg-gray-700 hover:bg-gray-600 rounded text-xs filter-btn" data-filter="all">全部</button>
+            <button class="px-2 py-1 bg-gray-700 hover:bg-gray-600 rounded text-xs filter-btn" data-filter="survival">生存</button>
+            <button class="px-2 py-1 bg-gray-700 hover:bg-gray-600 rounded text-xs filter-btn" data-filter="social">社交</button>
+            <button class="px-2 py-1 bg-gray-700 hover:bg-gray-600 rounded text-xs filter-btn" data-filter="discovery">發現</button>
+        </div>
+        <div id="eventLog" class="space-y-2 text-sm"></div>
+    </div>
+
+    <!-- 匯出報告模態框 -->
+    <div id="exportModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div class="bg-gray-800 p-6 rounded-lg max-w-4xl max-h-[80vh] overflow-auto export-modal">
+            <h2 class="text-2xl font-bold mb-4">📊 模擬報告</h2>
+            <div id="reportContent" class="text-sm space-y-4"></div>
+            <div class="mt-4 flex gap-2">
+                <button id="downloadReport" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded">
+                    下載 JSON
+                </button>
+                <button id="closeModal" class="px-4 py-2 bg-gray-600 hover:bg-gray-700 rounded">
+                    關閉
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 遊戲狀態
+        const gameState = {
+            agents: [],
+            resources: [],
+            isPaused: false,
+            speed: 1,
+            worldTime: 0, // 分鐘為單位
+            currentHour: 6, // 當前小時 (0-23)
+            currentDay: 1,
+            dayNight: 'day',
+            interactions: 0,
+            discoveries: [],
+            terrainMap: [],
+            apiKey: '',
+            apiMode: 'demo',
+            worldEvents: [],
+            deathCount: 0,
+            apiCallCount: 0,
+            logFilter: 'all'
+        };
+
+        // Stima API 配置
+        const STIMA_CONFIG = {
+            url: 'https://api.stima.tech/v1',
+            timeout: 60000,
+            models: {
+                'gpt-5-2025-08-07': { name: 'GPT-5', cost: 0.0072 },
+                'gpt-5-nano-2025-08-07': { name: 'GPT-5 Nano', cost: 0.00028 },
+                'claude-sonnet-4-20250514': { name: 'Claude Sonnet 4', cost: 0.01 },
+                'gemini-3-pro-preview-11-2025': { name: 'Gemini 3 Pro', cost: 0.01 },
+                'gemini-2.5-pro': { name: 'Gemini 2.5 Pro', cost: 0.005 },
+                'grok-3': { name: 'Grok 3', cost: 0.028 },
+                'grok-4': { name: 'Grok 4', cost: 0.015 },
+                'phi-4-reasoning-plus': { name: 'Phi 4 Reasoning Plus', cost: 0.00035 },
+                'deepseek-v3.2-exp': { name: 'DeepSeek V3.2', cost: 0.0006 },
+                'mistral-large-2411': { name: 'Mistral Large', cost: 0.018 }
+            }
+        };
+
+        // 地形類型
+        const TERRAIN_TYPES = {
+            GRASS: { name: '草地', class: 'terrain-grass', color: '#8BC34A', fertility: 0.8 },
+            SAND: { name: '沙地', class: 'terrain-sand', color: '#F4E4C1', fertility: 0.2 },
+            WATER: { name: '水域', class: 'terrain-water', color: '#42A5F5', fertility: 0 },
+            FOREST: { name: '森林', class: 'terrain-forest', color: '#2E7D32', fertility: 1 },
+            MOUNTAIN: { name: '山地', class: 'terrain-mountain', color: '#757575', fertility: 0.3 }
+        };
+
+        // 資源類型
+        const RESOURCE_TYPES = {
+            FRUIT: { 
+                symbols: ['🍎', '🍊', '🍇', '🍓', '🥝'], 
+                nutrition: 25,
+                hydration: 10,
+                danger: 0.1
+            },
+            PLANT: { 
+                symbols: ['🌿', '🌾', '🌻', '🌺', '🌸'], 
+                nutrition: 15,
+                hydration: 5,
+                danger: 0.05
+            },
+            MUSHROOM: { 
+                symbols: ['🍄'], 
+                nutrition: 20,
+                hydration: 5,
+                danger: 0.4  // 較高機率有毒
+            },
+            WATER_SOURCE: { 
+                symbols: ['💧'], 
+                nutrition: 0,
+                hydration: 30,
+                danger: 0
+            },
+            ANIMAL: { 
+                symbols: ['🐇', '🐿️', '🦌', '🐦'], 
+                nutrition: 40,
+                hydration: 15,
+                danger: 0.2
+            },
+            FISH: { 
+                symbols: ['🐟', '🐠', '🦐'], 
+                nutrition: 35,
+                hydration: 20,
+                danger: 0.1
+            }
+        };
+
+        // 初始化世界
+        function initWorld() {
+            const worldMap = document.getElementById('worldMap');
+            const cellSize = 100;
+            const cols = 30;
+            const rows = 20;
+            
+            // 使用柏林噪聲生成更自然的地形
+            const generateTerrain = (x, y) => {
+                const scale = 0.1;
+                const noise1 = Math.sin(x * scale) * Math.cos(y * scale);
+                const noise2 = Math.sin(x * scale * 2) * Math.cos(y * scale * 2) * 0.5;
+                const value = (noise1 + noise2 + Math.random() * 0.3) / 1.8;
+                
+                // 海岸線
+                if (y < 3 || y > 17 || x < 2 || x > 27) {
+                    return value > -0.2 ? TERRAIN_TYPES.WATER : TERRAIN_TYPES.SAND;
+                }
+                // 山脈
+                if (Math.abs(x - 15) < 3 && Math.abs(y - 10) < 4 && value > 0.3) {
+                    return TERRAIN_TYPES.MOUNTAIN;
+                }
+                // 森林
+                if (value > 0.4) {
+                    return TERRAIN_TYPES.FOREST;
+                }
+                // 沙地
+                if (value < -0.3) {
+                    return TERRAIN_TYPES.SAND;
+                }
+                // 草地
+                return TERRAIN_TYPES.GRASS;
+            };
+            
+            // 生成地形
+            for (let y = 0; y < rows; y++) {
+                gameState.terrainMap[y] = [];
+                for (let x = 0; x < cols; x++) {
+                    const cell = document.createElement('div');
+                    const terrainType = generateTerrain(x, y);
+                    
+                    cell.className = `absolute rounded-lg ${terrainType.class}`;
+                    cell.style.width = `${cellSize}px`;
+                    cell.style.height = `${cellSize}px`;
+                    cell.style.left = `${x * cellSize}px`;
+                    cell.style.top = `${y * cellSize}px`;
+                    cell.style.opacity = gameState.dayNight === 'day' ? '0.4' : '0.2';
+                    cell.dataset.terrain = terrainType.name;
+                    cell.dataset.x = x;
+                    cell.dataset.y = y;
+                    
+                    worldMap.appendChild(cell);
+                    gameState.terrainMap[y][x] = terrainType;
+                    
+                    // 生成資源
+                    if (terrainType.fertility > 0 && Math.random() < terrainType.fertility * 0.3) {
+                        generateResource(x * cellSize + 50, y * cellSize + 50, terrainType);
+                    }
+                }
+            }
+            
+            addEventLog('🌍 世界已創建，資源已散佈', 'system');
+        }
+
+        // 資源類
+        class Resource {
+            constructor(x, y, type, symbol) {
+                this.id = Date.now() + Math.random();
+                this.x = x;
+                this.y = y;
+                this.type = type;
+                this.symbol = symbol;
+                this.name = null; // 待 AI 發現並命名
+                this.discovered = false;
+                this.poisonous = Math.random() < type.danger;
+                this.element = null;
+                this.nutrition = type.nutrition;
+                this.hydration = type.hydration;
+            }
+            
+            createElement() {
+                const resource = document.createElement('div');
+                resource.className = 'resource-item absolute';
+                resource.id = `resource-${this.id}`;
+                resource.style.left = `${this.x}px`;
+                resource.style.top = `${this.y}px`;
+                resource.style.zIndex = '15';
+                
+                resource.innerHTML = `
+                    <div class="text-2xl opacity-70 hover:opacity-100 transition">
+                        ${this.symbol}
+                    </div>
+                `;
+                
+                this.element = resource;
+                document.getElementById('worldMap').appendChild(resource);
+            }
+            
+            consume(agent) {
+                if (this.poisonous) {
+                    agent.health -= 30;
+                    agent.mood = 'sick';
+                    agent.memory.push({
+                        type: 'danger',
+                        resource: this.symbol,
+                        name: this.name,
+                        location: { x: this.x, y: this.y }
+                    });
+                    addEventLog(`⚠️ ${agent.name} 吃了有毒的${this.name || '未知物'}！健康 -30`, 'survival');
+                } else {
+                    agent.hunger = Math.min(100, agent.hunger + this.nutrition);
+                    agent.thirst = Math.min(100, agent.thirst + this.hydration);
+                    agent.mood = 'happy';
+                    agent.memory.push({
+                        type: 'food',
+                        resource: this.symbol,
+                        name: this.name,
+                        nutrition: this.nutrition,
+                        location: { x: this.x, y: this.y }
+                    });
+                    addEventLog(`✅ ${agent.name} 吃了${this.name || this.symbol}，飢餓 +${this.nutrition}`, 'survival');
+                }
+                
+                // 資源被消耗後消失
+                if (this.element) {
+                    this.element.remove();
+                }
+                const index = gameState.resources.indexOf(this);
+                if (index > -1) {
+                    gameState.resources.splice(index, 1);
+                }
+                
+                // 一段時間後重新生成
+                setTimeout(() => {
+                    const terrain = gameState.terrainMap[Math.floor(this.y/100)]?.[Math.floor(this.x/100)];
+                    if (terrain && terrain.fertility > 0) {
+                        generateResource(this.x, this.y, terrain);
+                    }
+                }, 30000 / gameState.speed);
+            }
+        }
+
+        // 生成資源
+        function generateResource(x, y, terrain) {
+            let type, symbol;
+            
+            // 根據地形選擇資源類型
+            if (terrain === TERRAIN_TYPES.WATER) {
+                type = RESOURCE_TYPES.FISH;
+            } else if (terrain === TERRAIN_TYPES.FOREST) {
+                const types = [RESOURCE_TYPES.FRUIT, RESOURCE_TYPES.MUSHROOM, RESOURCE_TYPES.ANIMAL];
+                type = types[Math.floor(Math.random() * types.length)];
+            } else if (terrain === TERRAIN_TYPES.GRASS) {
+                const types = [RESOURCE_TYPES.PLANT, RESOURCE_TYPES.FRUIT, RESOURCE_TYPES.ANIMAL];
+                type = types[Math.floor(Math.random() * types.length)];
+            } else if (terrain === TERRAIN_TYPES.MOUNTAIN) {
+                type = RESOURCE_TYPES.WATER_SOURCE;
+            } else {
+                return; // 沙地不生成資源
+            }
+            
+            symbol = type.symbols[Math.floor(Math.random() * type.symbols.length)];
+            
+            // 添加一些位置偏移
+            x += (Math.random() - 0.5) * 80;
+            y += (Math.random() - 0.5) * 80;
+            
+            const resource = new Resource(x, y, type, symbol);
+            resource.createElement();
+            gameState.resources.push(resource);
+        }
+
+        // Agent 類
+        class AIAgent {
+            constructor(name, model, personality = '') {
+                this.id = Date.now() + Math.random();
+                this.name = name;
+                this.model = model;
+                this.personality = personality;
+                this.x = Math.random() * 2800 + 100;
+                this.y = Math.random() * 1800 + 100;
+                
+                // 生存屬性
+                this.health = 100;
+                this.hunger = 80;
+                this.thirst = 80;
+                this.energy = 100;
+                this.mood = 'curious';
+                
+                // 狀態
+                this.isAlive = true;
+                this.isSleeping = false;
+                this.lastSleepTime = 0;
+                
+                // 記憶與學習
+                this.memory = [];
+                this.knowledge = {};
+                this.relationships = {};
+                
+                // 移動
+                this.targetX = this.x;
+                this.targetY = this.y;
+                this.lastAction = '';
+                this.element = null;
+            }
+            
+            createElement() {
+                const agent = document.createElement('div');
+                agent.className = 'ai-agent absolute';
+                agent.id = `agent-${this.id}`;
+                agent.style.left = `${this.x}px`;
+                agent.style.top = `${this.y}px`;
+                agent.style.zIndex = '20';
+                
+                agent.innerHTML = `
+                    <div class="relative">
+                        <div class="w-12 h-12 bg-gradient-to-br from-purple-500 to-pink-500 rounded-full 
+                                    shadow-lg flex items-center justify-center text-2xl cursor-pointer
+                                    hover:scale-110 transition-transform ${this.isSleeping ? 'sleeping' : 'floating-animation'}">
+                            ${this.getEmoji()}
+                        </div>
+                        <!-- 生命值條 -->
+                        <div class="absolute -top-3 left-0 right-0 h-1 bg-gray-600 rounded-full overflow-hidden">
+                            <div class="health-bar h-full bg-gradient-to-r from-red-500 to-green-500" 
+                                 style="width: ${this.health}%"></div>
+                        </div>
+                        <!-- 狀態圖標 -->
+                        <div class="absolute -top-2 -right-2 flex gap-1">
+                            ${this.hunger < 30 ? '<span title="飢餓">🍽️</span>' : ''}
+                            ${this.thirst < 30 ? '<span title="口渴">💧</span>' : ''}
+                            ${this.energy < 30 ? '<span title="疲倦">😴</span>' : ''}
+                        </div>
+                        <div class="text-xs text-center mt-1 bg-black bg-opacity-50 px-2 py-1 rounded">
+                            ${this.name}
+                        </div>
+                    </div>
+                `;
+                
+                this.element = agent;
+                document.getElementById('worldMap').appendChild(agent);
+                
+                // 點擊顯示詳情
+                agent.addEventListener('click', () => this.showDetails());
+            }
+            
+            getEmoji() {
+                if (!this.isAlive) return '💀';
+                if (this.isSleeping) return '😴';
+                
+                const emojis = {
+                    happy: '😊',
+                    curious: '🤔',
+                    tired: '😫',
+                    hungry: '🤤',
+                    angry: '😠',
+                    love: '😍',
+                    sad: '😢',
+                    sick: '🤢',
+                    scared: '😨'
+                };
+                return emojis[this.mood] || '🤖';
+            }
+            
+            // 呼叫 Stima API
+            async callStimaAPI(prompt) {
+                if (gameState.apiMode !== 'stima' || !gameState.apiKey) {
+                    return this.demoThink();
+                }
+                
+                try {
+                    gameState.apiCallCount++;
+                    updateStats();
+                    
+                    const response = await fetch(`${STIMA_CONFIG.url}/chat/completions`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${gameState.apiKey}`
+                        },
+                        body: JSON.stringify({
+                            model: this.model,
+                            messages: [
+                                {
+                                    role: 'system',
+                                    content: `你是${this.name}，一個在虛擬生態系統中的AI生命體。${this.personality}`
+                                },
+                                {
+                                    role: 'user',
+                                    content: prompt
+                                }
+                            ],
+                            max_tokens: 150,
+                            temperature: 0.8
+                        })
+                    });
+                    
+                    if (!response.ok) {
+                        throw new Error('API request failed');
+                    }
+                    
+                    const data = await response.json();
+                    return this.parseAPIResponse(data.choices[0].message.content);
+                    
+                } catch (error) {
+                    console.error('Stima API 調用失敗:', error);
+                    return this.demoThink();
+                }
+            }
+            
+            parseAPIResponse(response) {
+                // 解析 LLM 回應
+                const actions = ['explore', 'eat', 'drink', 'sleep', 'socialize', 'rest'];
+                let selectedAction = 'explore';
+                let thought = response.substring(0, 100);
+                
+                // 簡單的關鍵字匹配來決定行動
+                if (response.includes('餓') || response.includes('食')) {
+                    selectedAction = 'eat';
+                } else if (response.includes('渴') || response.includes('水')) {
+                    selectedAction = 'drink';
+                } else if (response.includes('累') || response.includes('睡')) {
+                    selectedAction = 'sleep';
+                } else if (response.includes('朋友') || response.includes('交流')) {
+                    selectedAction = 'socialize';
+                }
+                
+                return { action: selectedAction, thought };
+            }
+            
+            async think() {
+                const perception = this.perceive();
+                const prompt = this.buildPrompt(perception);
+                
+                if (gameState.apiMode === 'stima' && gameState.apiKey) {
+                    return await this.callStimaAPI(prompt);
+                } else {
+                    return this.demoThink();
+                }
+            }
+            
+            demoThink() {
+                // 基於生存需求的決策
+                let action = 'explore';
+                let thought = '';
+                
+                // 優先級決策
+                if (this.health < 30) {
+                    thought = '我感覺很不舒服，需要治療';
+                    action = 'rest';
+                } else if (this.hunger < 30) {
+                    thought = '好餓啊，需要找食物';
+                    action = 'eat';
+                } else if (this.thirst < 30) {
+                    thought = '好渴，需要找水源';
+                    action = 'drink';
+                } else if (this.energy < 30 || (gameState.dayNight === 'night' && this.energy < 60)) {
+                    thought = '好累，需要休息了';
+                    action = 'sleep';
+                } else if (Math.random() < 0.2 && this.findNearbyAgent()) {
+                    thought = '想和其他人交流一下';
+                    action = 'socialize';
+                } else {
+                    const thoughts = [
+                        '這個世界真有趣',
+                        '我要去探索新的地方',
+                        '不知道前面有什麼',
+                        '今天天氣不錯'
+                    ];
+                    thought = thoughts[Math.floor(Math.random() * thoughts.length)];
+                    action = 'explore';
+                }
+                
+                return { action, thought };
+            }
+            
+            async update() {
+                if (!this.isAlive) return;
+                
+                // 更新生存狀態
+                this.updateSurvivalStats();
+                
+                // 檢查是否死亡
+                if (this.health <= 0 || this.hunger <= 0 || this.thirst <= 0) {
+                    this.die();
+                    return;
+                }
+                
+                // 睡眠中跳過行動
+                if (this.isSleeping) {
+                    this.sleep();
+                    return;
+                }
+                
+                // 思考下一步行動
+                const decision = await this.think();
+                
+                // 執行行動
+                switch(decision.action) {
+                    case 'explore':
+                        this.explore();
+                        break;
+                    case 'eat':
+                        this.eat();
+                        break;
+                    case 'drink':
+                        this.drink();
+                        break;
+                    case 'sleep':
+                        this.startSleep();
+                        break;
+                    case 'socialize':
+                        this.socialize();
+                        break;
+                    case 'rest':
+                        this.rest();
+                        break;
+                    default:
+                        this.wander();
+                }
+                
+                // 顯示思考內容
+                if (decision.thought && Math.random() > 0.6) {
+                    this.speak(decision.thought);
+                }
+                
+                // 更新顯示
+                this.updateDisplay();
+            }
+            
+            updateSurvivalStats() {
+                // 根據時間流逝消耗生存值
+                const consumptionRate = this.isSleeping ? 0.5 : 1;
+                
+                this.hunger = Math.max(0, this.hunger - 0.2 * consumptionRate);
+                this.thirst = Math.max(0, this.thirst - 0.3 * consumptionRate);
+                this.energy = this.isSleeping ? 
+                    Math.min(100, this.energy + 2) : 
+                    Math.max(0, this.energy - 0.15 * consumptionRate);
+                
+                // 飢餓和口渴影響健康
+                if (this.hunger < 10) this.health -= 0.5;
+                if (this.thirst < 10) this.health -= 0.8;
+                if (this.energy < 10) this.health -= 0.3;
+                
+                // 更新心情
+                if (this.health < 30) this.mood = 'sick';
+                else if (this.hunger < 30) this.mood = 'hungry';
+                else if (this.energy < 30) this.mood = 'tired';
+                else if (this.health > 80 && this.hunger > 60) this.mood = 'happy';
+            }
+            
+            explore() {
+                this.targetX = Math.random() * 2800 + 100;
+                this.targetY = Math.random() * 1800 + 100;
+                this.mood = 'curious';
+                this.lastAction = 'exploring';
+            }
+            
+            eat() {
+                const nearbyResource = this.findNearbyResource('food');
+                if (nearbyResource) {
+                    this.targetX = nearbyResource.x;
+                    this.targetY = nearbyResource.y;
+                    
+                    const dist = this.getDistance(nearbyResource);
+                    if (dist < 30) {
+                        // 第一次發現時命名
+                        if (!nearbyResource.discovered) {
+                            nearbyResource.discovered = true;
+                            nearbyResource.name = this.nameResource(nearbyResource);
+                            addEventLog(`🔍 ${this.name} 發現並命名了 "${nearbyResource.name}"`, 'discovery');
+                            gameState.discoveries.push({
+                                agent: this.name,
+                                resource: nearbyResource.name,
+                                symbol: nearbyResource.symbol,
+                                time: gameState.worldTime
+                            });
+                        }
+                        
+                        // 檢查記憶中是否知道有毒
+                        const isDangerous = this.memory.some(m => 
+                            m.type === 'danger' && m.resource === nearbyResource.symbol
+                        );
+                        
+                        if (isDangerous) {
+                            this.speak(`${nearbyResource.name}有毒！我不要吃`);
+                            this.mood = 'scared';
+                        } else {
+                            nearbyResource.consume(this);
+                        }
+                    }
+                } else {
+                    this.explore(); // 找不到食物就探索
+                }
+                this.lastAction = 'eating';
+            }
+            
+            drink() {
+                const waterSource = this.findNearbyResource('water');
+                if (waterSource) {
+                    this.targetX = waterSource.x;
+                    this.targetY = waterSource.y;
+                    
+                    const dist = this.getDistance(waterSource);
+                    if (dist < 30) {
+                        waterSource.consume(this);
+                        this.speak('啊，好清涼的水！');
+                    }
+                } else {
+                    this.explore();
+                }
+                this.lastAction = 'drinking';
+            }
+            
+            startSleep() {
+                this.isSleeping = true;
+                this.lastSleepTime = gameState.worldTime;
+                this.mood = 'tired';
+                this.speak('Zzz...');
+                addEventLog(`😴 ${this.name} 開始睡覺`, 'survival');
+            }
+            
+            sleep() {
+                // 睡眠恢復能量
+                this.energy = Math.min(100, this.energy + 3);
+                
+                // 睡滿一定時間後醒來
+                if (this.energy >= 90 || (gameState.worldTime - this.lastSleepTime) > 0.25) {
+                    this.isSleeping = false;
+                    this.mood = 'happy';
+                    this.speak('早安！睡得真好');
+                    addEventLog(`⏰ ${this.name} 醒來了`, 'survival');
+                }
+            }
+            
+            rest() {
+                this.health = Math.min(100, this.health + 2);
+                this.energy = Math.min(100, this.energy + 1);
+                this.mood = 'happy';
+                this.lastAction = 'resting';
+            }
+            
+            socialize() {
+                const nearbyAgent = this.findNearbyAgent();
+                if (nearbyAgent) {
+                    this.targetX = nearbyAgent.x;
+                    this.targetY = nearbyAgent.y;
+                    
+                    const dist = this.getDistance(nearbyAgent);
+                    if (dist < 50) {
+                        // 建立關係
+                        if (!this.relationships[nearbyAgent.id]) {
+                            this.relationships[nearbyAgent.id] = 0;
+                        }
+                        this.relationships[nearbyAgent.id]++;
+                        
+                        // 分享知識
+                        if (Math.random() < 0.3) {
+                            this.shareKnowledge(nearbyAgent);
+                        }
+                        
+                        this.mood = 'happy';
+                        gameState.interactions++;
+                        addEventLog(`💬 ${this.name} 與 ${nearbyAgent.name} 互動`, 'social');
+                    }
+                }
+                this.lastAction = 'socializing';
+            }
+            
+            shareKnowledge(otherAgent) {
+                // 分享關於危險資源的知識
+                const dangerousResources = this.memory.filter(m => m.type === 'danger');
+                if (dangerousResources.length > 0) {
+                    const shared = dangerousResources[0];
+                    otherAgent.memory.push(shared);
+                    this.speak(`小心！${shared.name || shared.resource}有毒！`);
+                    addEventLog(`📚 ${this.name} 向 ${otherAgent.name} 分享了知識`, 'social');
+                }
+            }
+            
+            die() {
+                this.isAlive = false;
+                this.mood = 'dead';
+                gameState.deathCount++;
+                addEventLog(`💀 ${this.name} 死亡了 (健康:${Math.floor(this.health)} 飢餓:${Math.floor(this.hunger)} 口渴:${Math.floor(this.thirst)})`, 'survival');
+                this.updateDisplay();
+                updateStats();
+            }
+            
+            findNearbyResource(type = null) {
+                const visionRange = 150;
+                let nearest = null;
+                let minDist = Infinity;
+                
+                for (const resource of gameState.resources) {
+                    // 過濾類型
+                    if (type === 'food' && resource.type.nutrition === 0) continue;
+                    if (type === 'water' && resource.type.hydration === 0) continue;
+                    
+                    const dist = this.getDistance(resource);
+                    if (dist < visionRange && dist < minDist) {
+                        minDist = dist;
+                        nearest = resource;
+                    }
+                }
+                
+                return nearest;
+            }
+            
+            findNearbyAgent() {
+                let nearest = null;
+                let minDist = Infinity;
+                
+                for (const agent of gameState.agents) {
+                    if (agent.id === this.id || !agent.isAlive) continue;
+                    
+                    const dist = this.getDistance(agent);
+                    if (dist < minDist && dist < 300) {
+                        minDist = dist;
+                        nearest = agent;
+                    }
+                }
+                
+                return nearest;
+            }
+            
+            getDistance(target) {
+                return Math.sqrt(
+                    Math.pow(target.x - this.x, 2) + 
+                    Math.pow(target.y - this.y, 2)
+                );
+            }
+            
+            nameResource(resource) {
+                const prefixes = ['奇異', '神秘', '閃亮', '美味', '香甜', '野生', '罕見', '古老'];
+                const suffixes = ['果', '草', '菌', '莓', '實', '花', '葉', '根'];
+                
+                const prefix = prefixes[Math.floor(Math.random() * prefixes.length)];
+                const suffix = suffixes[Math.floor(Math.random() * suffixes.length)];
+                
+                return `${prefix}${suffix}`;
+            }
+            
+            perceive() {
+                const vision = {
+                    terrain: this.getCurrentTerrain(),
+                    nearbyAgents: [],
+                    nearbyResources: [],
+                    timeOfDay: gameState.dayNight,
+                    hour: gameState.currentHour
+                };
+                
+                // 感知其他 Agent
+                for (const agent of gameState.agents) {
+                    if (agent.id === this.id || !agent.isAlive) continue;
+                    const dist = this.getDistance(agent);
+                    if (dist < 200) {
+                        vision.nearbyAgents.push({
+                            name: agent.name,
+                            mood: agent.mood,
+                            health: agent.health,
+                            distance: dist
+                        });
+                    }
+                }
+                
+                // 感知資源
+                for (const resource of gameState.resources) {
+                    const dist = this.getDistance(resource);
+                    if (dist < 150) {
+                        vision.nearbyResources.push({
+                            symbol: resource.symbol,
+                            name: resource.name,
+                            distance: dist
+                        });
+                    }
+                }
+                
+                return vision;
+            }
+            
+            getCurrentTerrain() {
+                const x = Math.floor(this.x / 100);
+                const y = Math.floor(this.y / 100);
+                return gameState.terrainMap[y]?.[x] || TERRAIN_TYPES.GRASS;
+            }
+            
+            wander() {
+                const dx = (Math.random() - 0.5) * 100;
+                const dy = (Math.random() - 0.5) * 100;
+                this.targetX = Math.max(50, Math.min(2950, this.x + dx));
+                this.targetY = Math.max(50, Math.min(1950, this.y + dy));
+                this.lastAction = 'wandering';
+            }
+            
+            speak(message) {
+                const bubble = document.createElement('div');
+                bubble.className = 'speech-bubble absolute bg-white text-black p-2 rounded-lg text-xs max-w-xs z-30';
+                bubble.style.left = `${this.x + 20}px`;
+                bubble.style.top = `${this.y - 30}px`;
+                bubble.textContent = message;
+                
+                document.getElementById('worldMap').appendChild(bubble);
+                
+                setTimeout(() => bubble.remove(), 3000);
+                
+                addEventLog(`${this.name}: "${message}"`, 'speech');
+            }
+            
+            move() {
+                if (this.isSleeping || !this.isAlive) return;
+                
+                const speed = 5 * gameState.speed;
+                const dx = this.targetX - this.x;
+                const dy = this.targetY - this.y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                
+                if (dist > speed) {
+                    this.x += (dx / dist) * speed;
+                    this.y += (dy / dist) * speed;
+                    
+                    if (this.element) {
+                        this.element.style.left = `${this.x}px`;
+                        this.element.style.top = `${this.y}px`;
+                    }
+                }
+            }
+            
+            updateDisplay() {
+                if (!this.element) return;
+                
+                // 更新表情
+                const emoji = this.element.querySelector('.text-2xl');
+                if (emoji) {
+                    emoji.textContent = this.getEmoji();
+                    if (this.isSleeping) {
+                        emoji.parentElement.classList.add('sleeping');
+                        emoji.parentElement.classList.remove('floating-animation');
+                    } else {
+                        emoji.parentElement.classList.remove('sleeping');
+                        emoji.parentElement.classList.add('floating-animation');
+                    }
+                }
+                
+                // 更新生命值條
+                const healthBar = this.element.querySelector('.health-bar');
+                if (healthBar) {
+                    healthBar.style.width = `${this.health}%`;
+                }
+                
+                // 更新狀態圖標
+                const statusIcons = this.element.querySelector('.absolute.-top-2.-right-2');
+                if (statusIcons) {
+                    statusIcons.innerHTML = `
+                        ${this.hunger < 30 ? '<span title="飢餓">🍽️</span>' : ''}
+                        ${this.thirst < 30 ? '<span title="口渴">💧</span>' : ''}
+                        ${this.energy < 30 ? '<span title="疲倦">😴</span>' : ''}
+                    `;
+                }
+                
+                // 死亡時降低透明度
+                if (!this.isAlive) {
+                    this.element.style.opacity = '0.5';
+                }
+            }
+            
+            showDetails() {
+                const details = `
+【${this.name}】
+模型: ${STIMA_CONFIG.models[this.model]?.name || this.model}
+狀態: ${this.isAlive ? '存活' : '死亡'}
+
+生存指標:
+❤️ 健康: ${Math.floor(this.health)}%
+🍽️ 飢餓: ${Math.floor(this.hunger)}%
+💧 口渴: ${Math.floor(this.thirst)}%
+⚡ 能量: ${Math.floor(this.energy)}%
+
+心情: ${this.mood}
+最後行動: ${this.lastAction}
+記憶數: ${this.memory.length}
+關係數: ${Object.keys(this.relationships).length}
+                `;
+                alert(details);
+            }
+            
+            buildPrompt(perception) {
+                const terrain = perception.terrain;
+                
+                return `
+你是${this.name}，一個在虛擬生態系統中生存的AI生命體。
+${this.personality ? `個性：${this.personality}` : ''}
+
+當前狀態：
+- 健康：${this.health}% ${this.health < 30 ? '(危險！)' : ''}
+- 飢餓：${this.hunger}% ${this.hunger < 30 ? '(非常餓)' : ''}
+- 口渴：${this.thirst}% ${this.thirst < 30 ? '(非常渴)' : ''}
+- 能量：${this.energy}% ${this.energy < 30 ? '(疲倦)' : ''}
+- 時間：${perception.timeOfDay === 'day' ? '白天' : '夜晚'} ${perception.hour}:00
+
+環境：
+- 地形：${terrain.name}
+- 附近生命體：${perception.nearbyAgents.length > 0 ? perception.nearbyAgents.map(a => a.name).join(', ') : '無'}
+- 附近資源：${perception.nearbyResources.length > 0 ? perception.nearbyResources.map(r => r.name || r.symbol).join(', ') : '無'}
+
+基於以上信息，決定你的下一個行動（explore/eat/drink/sleep/socialize/rest）和內心想法（50字以內）。
+                `;
+            }
+        }
+
+        // 添加事件日誌
+        function addEventLog(message, type = 'info') {
+            const log = document.getElementById('eventLog');
+            const entry = document.createElement('div');
+            entry.className = `p-2 rounded log-entry ${type} ${
+                type === 'system' ? 'bg-blue-900' :
+                type === 'social' ? 'bg-purple-900' :
+                type === 'survival' ? 'bg-green-900' :
+                type === 'discovery' ? 'bg-yellow-900' :
+                type === 'speech' ? 'bg-gray-700' :
+                'bg-gray-800'
+            }`;
+            
+            const time = `${String(gameState.currentHour).padStart(2, '0')}:${String(Math.floor((gameState.worldTime % 1) * 60)).padStart(2, '0')}`;
+            entry.innerHTML = `
+                <div class="text-xs text-gray-400">Day ${gameState.currentDay} ${time}</div>
+                <div>${message}</div>
+            `;
+            
+            log.insertBefore(entry, log.firstChild);
+            
+            // 保持日誌數量
+            while (log.children.length > 100) {
+                log.removeChild(log.lastChild);
+            }
+        }
+
+        // 更新統計
+        function updateStats() {
+            document.getElementById('population').textContent = gameState.agents.length;
+            document.getElementById('aliveCount').textContent = gameState.agents.filter(a => a.isAlive).length;
+            document.getElementById('deathCount').textContent = gameState.deathCount;
+            document.getElementById('interactions').textContent = gameState.interactions;
+            document.getElementById('discoveries').textContent = gameState.discoveries.length;
+            document.getElementById('apiCalls').textContent = gameState.apiCallCount;
+        }
+
+        // 更新時間顯示
+        function updateTimeDisplay() {
+            // 計算當前時間
+            gameState.currentHour = Math.floor((gameState.worldTime % 1) * 24);
+            gameState.currentDay = Math.floor(gameState.worldTime) + 1;
+            
+            // 判斷日夜
+            const isNight = gameState.currentHour >= 20 || gameState.currentHour < 6;
+            const newDayNight = isNight ? 'night' : 'day';
+            
+            if (newDayNight !== gameState.dayNight) {
+                gameState.dayNight = newDayNight;
+                const container = document.getElementById('worldContainer');
+                if (isNight) {
+                    container.classList.remove('day-sky');
+                    container.classList.add('night-sky');
+                    addEventLog('🌙 夜晚降臨', 'system');
+                } else {
+                    container.classList.remove('night-sky');
+                    container.classList.add('day-sky');
+                    addEventLog('☀️ 太陽升起', 'system');
+                }
+                
+                // 調整地形透明度
+                document.querySelectorAll('[data-terrain]').forEach(cell => {
+                    cell.style.opacity = isNight ? '0.2' : '0.4';
+                });
+            }
+            
+            // 更新顯示
+            document.getElementById('dayIcon').textContent = isNight ? '🌙' : '☀️';
+            document.getElementById('timeDisplay').textContent = 
+                `Day ${gameState.currentDay} - ${String(gameState.currentHour).padStart(2, '0')}:00`;
+        }
+
+        // 添加新 Agent
+        function addAgent() {
+            const name = document.getElementById('agentName').value || `Agent-${gameState.agents.length + 1}`;
+            const model = document.getElementById('modelSelect').value;
+            const personality = document.getElementById('agentPersonality').value;
+            
+            const agent = new AIAgent(name, model, personality);
+            agent.createElement();
+            gameState.agents.push(agent);
+            
+            // 更新 UI
+            updateAgentsList();
+            updateStats();
+            
+            // 清空輸入
+            document.getElementById('agentName').value = '';
+            document.getElementById('agentPersonality').value = '';
+            
+            addEventLog(`🎉 ${name} (${STIMA_CONFIG.models[model]?.name || model}) 加入了世界`, 'system');
+        }
+
+        // 更新 Agents 列表
+        function updateAgentsList() {
+            const list = document.getElementById('agentsList');
+            list.innerHTML = '';
+            
+            gameState.agents.forEach(agent => {
+                const item = document.createElement('div');
+                item.className = `p-2 bg-gray-700 rounded ${!agent.isAlive ? 'opacity-50' : ''}`;
+                item.innerHTML = `
+                    <div class="flex justify-between items-center">
+                        <div>
+                            <div class="font-semibold">${agent.name} ${!agent.isAlive ? '💀' : ''}</div>
+                            <div class="text-xs text-gray-400">${STIMA_CONFIG.models[agent.model]?.name || agent.model}</div>
+                        </div>
+                        <button onclick="removeAgent('${agent.id}')" 
+                                class="text-red-400 hover:text-red-300">
+                            ❌
+                        </button>
+                    </div>
+                    <div class="mt-1 text-xs">
+                        ❤️${Math.floor(agent.health)} 🍽️${Math.floor(agent.hunger)} 💧${Math.floor(agent.thirst)} ⚡${Math.floor(agent.energy)}
+                    </div>
+                `;
+                list.appendChild(item);
+            });
+        }
+
+        // 移除 Agent
+        function removeAgent(id) {
+            const index = gameState.agents.findIndex(a => a.id == id);
+            if (index !== -1) {
+                const agent = gameState.agents[index];
+                if (agent.element) {
+                    agent.element.remove();
+                }
+                gameState.agents.splice(index, 1);
+                updateAgentsList();
+                updateStats();
+                addEventLog(`${agent.name} 離開了世界`, 'system');
+            }
+        }
+
+        // 生成報告
+        function generateReport() {
+            const report = {
+                simulationTime: {
+                    days: gameState.currentDay,
+                    hours: gameState.currentHour,
+                    realTimeMinutes: gameState.worldTime
+                },
+                population: {
+                    total: gameState.agents.length,
+                    alive: gameState.agents.filter(a => a.isAlive).length,
+                    deaths: gameState.deathCount
+                },
+                agents: gameState.agents.map(agent => ({
+                    name: agent.name,
+                    model: agent.model,
+                    status: agent.isAlive ? 'alive' : 'dead',
+                    health: Math.floor(agent.health),
+                    hunger: Math.floor(agent.hunger),
+                    thirst: Math.floor(agent.thirst),
+                    energy: Math.floor(agent.energy),
+                    mood: agent.mood,
+                    memoryCount: agent.memory.length,
+                    relationships: Object.keys(agent.relationships).length,
+                    lastAction: agent.lastAction
+                })),
+                interactions: gameState.interactions,
+                discoveries: gameState.discoveries,
+                apiCalls: gameState.apiCallCount,
+                events: gameState.worldEvents.slice(-50) // 最後50個事件
+            };
+            
+            return report;
+        }
+
+        // 遊戲循環
+        function gameLoop() {
+            if (!gameState.isPaused) {
+                // 更新世界時間（1分鐘 = 遊戲中24小時）
+                gameState.worldTime += (0.0167 * gameState.speed) / 60; // 60 FPS
+                updateTimeDisplay();
+                
+                // 更新所有 agents
+                gameState.agents.forEach(agent => {
+                    agent.move();
+                    if (Math.random() < 0.1 * gameState.speed) { // 根據速度調整更新頻率
+                        agent.update();
+                    }
+                });
+                
+                // 定期更新 UI
+                if (Math.random() < 0.05) {
+                    updateAgentsList();
+                    updateStats();
+                }
+            }
+            
+            requestAnimationFrame(gameLoop);
+        }
+
+        // 初始化事件監聽器
+        document.addEventListener('DOMContentLoaded', () => {
+            initWorld();
+            
+            // 添加 Agent 按鈕
+            document.getElementById('addAgentBtn').addEventListener('click', addAgent);
+            
+            // 暫停按鈕
+            document.getElementById('pauseBtn').addEventListener('click', () => {
+                gameState.isPaused = !gameState.isPaused;
+                document.getElementById('pauseBtn').innerHTML = gameState.isPaused ? 
+                    '▶️ 繼續' : '⏸️ 暫停';
+            });
+            
+            // 速度按鈕
+            document.getElementById('speedBtn').addEventListener('click', () => {
+                gameState.speed = gameState.speed === 1 ? 2 : gameState.speed === 2 ? 5 : gameState.speed === 5 ? 10 : 1;
+                document.getElementById('speedBtn').innerHTML = `⚡ 速度: ${gameState.speed}x`;
+            });
+            
+            // API 設定
+            document.getElementById('apiKey').addEventListener('change', (e) => {
+                gameState.apiKey = e.target.value;
+            });
+            
+            document.getElementById('apiMode').addEventListener('change', (e) => {
+                gameState.apiMode = e.target.value;
+                if (e.target.value === 'demo') {
+                    addEventLog('切換到 Demo 模式 - 無需 API Key', 'system');
+                } else {
+                    addEventLog('切換到 Stima API 模式 - 請輸入 API Key', 'system');
+                }
+            });
+            
+            // 測試 API 連線
+            document.getElementById('testApiBtn').addEventListener('click', async () => {
+                if (!gameState.apiKey) {
+                    alert('請先輸入 API Key');
+                    return;
+                }
+                
+                try {
+                    const response = await fetch(`${STIMA_CONFIG.url}/models`, {
+                        headers: {
+                            'Authorization': `Bearer ${gameState.apiKey}`
+                        }
+                    });
+                    
+                    if (response.ok) {
+                        alert('✅ API 連線成功！');
+                        addEventLog('✅ Stima API 連線測試成功', 'system');
+                    } else {
+                        alert('❌ API 連線失敗，請檢查 API Key');
+                    }
+                } catch (error) {
+                    alert('❌ 連線錯誤：' + error.message);
+                }
+            });
+            
+            // 匯出報告
+            document.getElementById('exportBtn').addEventListener('click', () => {
+                const report = generateReport();
+                const reportHTML = `
+                    <h3>模擬時間</h3>
+                    <p>天數: ${report.simulationTime.days} | 時間: ${report.simulationTime.hours}:00</p>
+                    
+                    <h3>人口統計</h3>
+                    <p>總數: ${report.population.total} | 存活: ${report.population.alive} | 死亡: ${report.population.deaths}</p>
+                    
+                    <h3>互動統計</h3>
+                    <p>互動次數: ${report.interactions} | 發現數: ${report.discoveries.length}</p>
+                    
+                    <h3>Agent 詳情</h3>
+                    <div class="max-h-60 overflow-y-auto">
+                        ${report.agents.map(a => `
+                            <div class="p-2 mb-2 bg-gray-700 rounded">
+                                <strong>${a.name}</strong> (${a.model})
+                                <br>狀態: ${a.status === 'alive' ? '存活' : '死亡'}
+                                <br>生存: ❤️${a.health} 🍽️${a.hunger} 💧${a.thirst} ⚡${a.energy}
+                                <br>心情: ${a.mood} | 記憶: ${a.memoryCount} | 關係: ${a.relationships}
+                            </div>
+                        `).join('')}
+                    </div>
+                `;
+                
+                document.getElementById('reportContent').innerHTML = reportHTML;
+                document.getElementById('exportModal').classList.remove('hidden');
+            });
+            
+            // 關閉模態框
+            document.getElementById('closeModal').addEventListener('click', () => {
+                document.getElementById('exportModal').classList.add('hidden');
+            });
+            
+            // 下載報告
+            document.getElementById('downloadReport').addEventListener('click', () => {
+                const report = generateReport();
+                const dataStr = JSON.stringify(report, null, 2);
+                const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
+                
+                const exportFileDefaultName = `ai-ecosystem-report-${Date.now()}.json`;
+                
+                const linkElement = document.createElement('a');
+                linkElement.setAttribute('href', dataUri);
+                linkElement.setAttribute('download', exportFileDefaultName);
+                linkElement.click();
+            });
+            
+            // 日誌過濾
+            document.querySelectorAll('.filter-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    gameState.logFilter = e.target.dataset.filter;
+                    document.querySelectorAll('.log-entry').forEach(entry => {
+                        if (gameState.logFilter === 'all' || entry.classList.contains(gameState.logFilter)) {
+                            entry.style.display = 'block';
+                        } else {
+                            entry.style.display = 'none';
+                        }
+                    });
+                });
+            });
+            
+            // 自動添加幾個示範 Agent
+            setTimeout(() => {
+                const demoAgents = [
+                    { name: '探索者', model: 'gpt-5-nano-2025-08-07', personality: '好奇心強，喜歡探索未知' },
+                    { name: '生存專家', model: 'deepseek-v3.2-exp', personality: '謹慎小心，擅長生存' },
+                    { name: '社交達人', model: 'gemini-2.5-pro', personality: '友善熱情，喜歡交朋友' }
+                ];
+                
+                demoAgents.forEach((config, index) => {
+                    setTimeout(() => {
+                        document.getElementById('agentName').value = config.name;
+                        document.getElementById('modelSelect').value = config.model;
+                        document.getElementById('agentPersonality').value = config.personality;
+                        addAgent();
+                    }, index * 500);
+                });
+            }, 1000);
+            
+            // 開始遊戲循環
+            gameLoop();
+        });
+    </script>
+</body>
+  </html>
