@@ -35,7 +35,10 @@
 
 ## 結論：您現在最快解法（30 分鐘內搞定）
 1. 註冊 Cloudflare 帳號 → Workers & Pages → Start with Hello World
+   <img src="IMG/02-back1.png" width="40%">
 2. 點擊 `edit code` ，貼上下面的 Proxy 程式碼
+   <img src="IMG/03-back2.png" width="40%">
+   
 ```JS
 export default {
   async fetch(request, env) {
@@ -65,8 +68,11 @@ export default {
   }
 };
 ```
-3. 回到前一頁，點擊 `Setting` ，在 `Variables and Secrets` 點擊 `+ADD` ，新增兩個
+3. 回到前一頁，點擊 `Setting` ，在 `Variables and Secrets` 點擊 `+ADD` 
 
+<img src="IMG/04-back3.png" width="40%">
+
+新增兩個：
 ```text
 PUBLIC_KEY = pk-lf-xxxx
 SECRET_KEY = sk-lf-xxxx
