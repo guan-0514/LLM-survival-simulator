@@ -89,8 +89,7 @@ const response_api = await fetch("https://my-langfuse-proxy.yourname.workers.dev
 });
 ```
 
-5. Secret Key 填到 Worker 的 Secrets 裡面
-6. 完成！GitHub Pages 完全不用改其他東西，Langfuse 數據立刻就會出現。
+5. 完成！GitHub Pages 完全不用改其他東西，Langfuse 數據立刻就會出現。
 
 這樣您就不用離開 GitHub Pages，又能擁有「後端」功能了！
 
