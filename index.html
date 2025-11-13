@@ -738,15 +738,21 @@
                         vendor: modelInfo?.vendor || 'Unknown'
                     }
                 };
-        
-                const apiResponse = await fetch('https://your-project.vercel.app/api/langfuse', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify(payload)
+
+                const response_api = await fetch("https://my-langfuse-proxy.yourname.workers.dev", {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/json",
+                  },
+                  body: JSON.stringify({
+                    batch: events,
+                    metadata: {
+                      sdk_name: "ai-ecosystem-simulator",
+                      sdk_version: "1.0.0"
+                    }
+                  })
                 });
-        
+                
                 if (apiResponse.ok) {
                     const result = await apiResponse.json();
                     console.log('✅ Langfuse 追踪成功:', result);
