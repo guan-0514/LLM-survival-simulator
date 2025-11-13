@@ -1,0 +1,679 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI 生態系統 - LLM 探索世界</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <style>
+        .world-container {
+            background: linear-gradient(to bottom, #87CEEB 0%, #98D8C8 40%, #F7DC6F 60%, #76D7C4 80%, #5DADE2 100%);
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .terrain-grass {
+            background: linear-gradient(135deg, #7CB342, #8BC34A, #9CCC65);
+        }
+        
+        .terrain-desert {
+            background: linear-gradient(135deg, #D4A574, #DEB887, #F4E4C1);
+        }
+        
+        .terrain-water {
+            background: linear-gradient(135deg, #42A5F5, #64B5F6, #90CAF9);
+            animation: water-wave 3s infinite ease-in-out;
+        }
+        
+        .terrain-forest {
+            background: linear-gradient(135deg, #2E7D32, #388E3C, #43A047);
+        }
+        
+        @keyframes water-wave {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-2px); }
+        }
+        
+        .ai-agent {
+            transition: all 0.5s ease;
+            z-index: 10;
+        }
+        
+        .speech-bubble {
+            animation: fadeIn 0.3s ease;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: scale(0.8); }
+            to { opacity: 1; transform: scale(1); }
+        }
+        
+        .floating-animation {
+            animation: float 6s ease-in-out infinite;
+        }
+        
+        @keyframes float {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-10px); }
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-white min-h-screen">
+    <!-- 控制面板 -->
+    <div class="fixed top-0 left-0 right-0 bg-gray-800 shadow-lg z-50 p-4">
+        <div class="max-w-7xl mx-auto flex items-center justify-between">
+            <h1 class="text-2xl font-bold bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent">
+                🌍 AI 生態系統模擬器
+            </h1>
+            <div class="flex gap-4">
+                <button id="pauseBtn" class="px-4 py-2 bg-yellow-600 hover:bg-yellow-700 rounded-lg transition">
+                    ⏸️ 暫停
+                </button>
+                <button id="speedBtn" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg transition">
+                    ⚡ 速度: 1x
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 側邊欄 - AI 配置 -->
+    <div class="fixed left-0 top-20 bottom-0 w-80 bg-gray-800 shadow-xl z-40 p-4 overflow-y-auto">
+        <h2 class="text-xl font-bold mb-4">🤖 AI 配置</h2>
+        
+        <!-- API 設定 -->
+        <div class="mb-6 p-4 bg-gray-700 rounded-lg">
+            <h3 class="font-semibold mb-2">API 設定</h3>
+            <input id="apiKey" type="password" placeholder="輸入 API Key" 
+                   class="w-full p-2 bg-gray-600 rounded mb-2 text-sm">
+            <select id="apiProvider" class="w-full p-2 bg-gray-600 rounded mb-2">
+                <option value="openai">OpenAI</option>
+                <option value="anthropic">Anthropic</option>
+                <option value="google">Google AI</option>
+                <option value="demo">Demo Mode (無需 API)</option>
+            </select>
+        </div>
+
+        <!-- 添加 AI Agent -->
+        <div class="mb-6 p-4 bg-gray-700 rounded-lg">
+            <h3 class="font-semibold mb-2">添加 AI Agent</h3>
+            <input id="agentName" type="text" placeholder="Agent 名稱" 
+                   class="w-full p-2 bg-gray-600 rounded mb-2 text-sm">
+            <select id="modelSelect" class="w-full p-2 bg-gray-600 rounded mb-2">
+                <option value="gpt-4">GPT-4</option>
+                <option value="gpt-3.5">GPT-3.5</option>
+                <option value="claude-3">Claude 3</option>
+                <option value="gemini-pro">Gemini Pro</option>
+            </select>
+            <textarea id="agentPersonality" placeholder="個性描述 (可選)" 
+                      class="w-full p-2 bg-gray-600 rounded mb-2 text-sm h-20"></textarea>
+            <button id="addAgentBtn" 
+                    class="w-full py-2 bg-green-600 hover:bg-green-700 rounded transition">
+                ➕ 添加 Agent
+            </button>
+        </div>
+
+        <!-- 現有 Agents -->
+        <div class="mb-6">
+            <h3 class="font-semibold mb-2">🎭 活躍 Agents</h3>
+            <div id="agentsList" class="space-y-2"></div>
+        </div>
+
+        <!-- 統計資訊 -->
+        <div class="p-4 bg-gray-700 rounded-lg">
+            <h3 class="font-semibold mb-2">📊 統計</h3>
+            <div id="stats" class="text-sm space-y-1">
+                <div>總人口: <span id="population">0</span></div>
+                <div>互動次數: <span id="interactions">0</span></div>
+                <div>時間: <span id="worldTime">Day 1</span></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 主遊戲區域 -->
+    <div class="ml-80 mt-20 p-4">
+        <div id="worldContainer" class="world-container rounded-lg shadow-2xl relative"
+             style="width: calc(100vw - 22rem); height: calc(100vh - 7rem); overflow: auto;">
+            
+            <!-- 世界地圖 -->
+            <div id="worldMap" class="relative" style="width: 3000px; height: 2000px;">
+                <!-- 地形將在這裡動態生成 -->
+            </div>
+        </div>
+    </div>
+
+    <!-- 事件日誌 -->
+    <div class="fixed right-0 top-20 bottom-0 w-80 bg-gray-800 shadow-xl z-40 p-4 overflow-y-auto">
+        <h2 class="text-xl font-bold mb-4">📜 事件日誌</h2>
+        <div id="eventLog" class="space-y-2 text-sm"></div>
+    </div>
+
+    <script>
+        // 遊戲狀態
+        const gameState = {
+            agents: [],
+            isPaused: false,
+            speed: 1,
+            worldTime: 1,
+            interactions: 0,
+            terrainMap: [],
+            apiKey: '',
+            apiProvider: 'demo'
+        };
+
+        // 地形類型
+        const TERRAIN_TYPES = {
+            GRASS: { name: '草地', class: 'terrain-grass', emoji: '🌱' },
+            DESERT: { name: '沙漠', class: 'terrain-desert', emoji: '🏜️' },
+            WATER: { name: '海洋', class: 'terrain-water', emoji: '🌊' },
+            FOREST: { name: '森林', class: 'terrain-forest', emoji: '🌳' }
+        };
+
+        // 初始化世界
+        function initWorld() {
+            const worldMap = document.getElementById('worldMap');
+            const cellSize = 100;
+            const cols = 30;
+            const rows = 20;
+            
+            // 生成地形
+            for (let y = 0; y < rows; y++) {
+                for (let x = 0; x < cols; x++) {
+                    const cell = document.createElement('div');
+                    cell.className = 'absolute rounded-lg opacity-30';
+                    cell.style.width = `${cellSize}px`;
+                    cell.style.height = `${cellSize}px`;
+                    cell.style.left = `${x * cellSize}px`;
+                    cell.style.top = `${y * cellSize}px`;
+                    
+                    // 基於位置生成不同地形
+                    let terrainType;
+                    const noise = Math.random();
+                    
+                    if (y < 5 && noise > 0.3) {
+                        terrainType = TERRAIN_TYPES.WATER;
+                    } else if (y > 15 && noise > 0.4) {
+                        terrainType = TERRAIN_TYPES.DESERT;
+                    } else if (noise > 0.7) {
+                        terrainType = TERRAIN_TYPES.FOREST;
+                    } else {
+                        terrainType = TERRAIN_TYPES.GRASS;
+                    }
+                    
+                    cell.classList.add(terrainType.class);
+                    cell.dataset.terrain = terrainType.name;
+                    cell.dataset.x = x;
+                    cell.dataset.y = y;
+                    
+                    worldMap.appendChild(cell);
+                    
+                    // 存儲地形信息
+                    if (!gameState.terrainMap[y]) gameState.terrainMap[y] = [];
+                    gameState.terrainMap[y][x] = terrainType;
+                }
+            }
+            
+            addEventLog('🌍 世界已創建', 'system');
+        }
+
+        // Agent 類
+        class AIAgent {
+            constructor(name, model, personality = '') {
+                this.id = Date.now() + Math.random();
+                this.name = name;
+                this.model = model;
+                this.personality = personality;
+                this.x = Math.random() * 2800 + 100;
+                this.y = Math.random() * 1800 + 100;
+                this.energy = 100;
+                this.mood = 'curious';
+                this.memory = [];
+                this.element = null;
+                this.targetX = this.x;
+                this.targetY = this.y;
+                this.lastAction = '';
+                this.relationships = {};
+            }
+            
+            createElement() {
+                const agent = document.createElement('div');
+                agent.className = 'ai-agent absolute';
+                agent.id = `agent-${this.id}`;
+                agent.style.left = `${this.x}px`;
+                agent.style.top = `${this.y}px`;
+                agent.style.zIndex = '20';
+                
+                agent.innerHTML = `
+                    <div class="relative">
+                        <div class="w-12 h-12 bg-gradient-to-br from-purple-500 to-pink-500 rounded-full 
+                                    shadow-lg flex items-center justify-center text-2xl cursor-pointer
+                                    hover:scale-110 transition-transform floating-animation">
+                            ${this.getEmoji()}
+                        </div>
+                        <div class="absolute -top-2 -right-2 bg-green-500 w-4 h-4 rounded-full 
+                                    flex items-center justify-center text-xs">
+                            ${Math.floor(this.energy)}
+                        </div>
+                        <div class="text-xs text-center mt-1 bg-black bg-opacity-50 px-2 py-1 rounded">
+                            ${this.name}
+                        </div>
+                    </div>
+                `;
+                
+                this.element = agent;
+                document.getElementById('worldMap').appendChild(agent);
+                
+                // 點擊顯示詳情
+                agent.addEventListener('click', () => this.showDetails());
+            }
+            
+            getEmoji() {
+                const emojis = {
+                    happy: '😊',
+                    curious: '🤔',
+                    tired: '😴',
+                    hungry: '🤤',
+                    angry: '😠',
+                    love: '😍',
+                    sad: '😢'
+                };
+                return emojis[this.mood] || '🤖';
+            }
+            
+            async think() {
+                // 在 Demo 模式下使用預設行為
+                if (gameState.apiProvider === 'demo') {
+                    return this.demoThink();
+                }
+                
+                // 真實 API 調用邏輯
+                try {
+                    const prompt = this.buildPrompt();
+                    // 這裡應該調用實際的 LLM API
+                    // const response = await callLLMAPI(prompt);
+                    // return this.parseResponse(response);
+                } catch (error) {
+                    console.error('API 調用失敗:', error);
+                    return this.demoThink();
+                }
+            }
+            
+            demoThink() {
+                // 模擬 AI 思考
+                const actions = ['explore', 'rest', 'socialize', 'eat', 'think'];
+                const action = actions[Math.floor(Math.random() * actions.length)];
+                
+                const thoughts = {
+                    explore: ['我想去探索新的地方', '這個世界真大啊', '前面有什麼呢？'],
+                    rest: ['我有點累了', '休息一下吧', '這裡風景不錯'],
+                    socialize: ['我想認識新朋友', '打個招呼吧', '大家好呀！'],
+                    eat: ['肚子餓了', '找點食物吧', '這裡有什麼可以吃的？'],
+                    think: ['我在想...', '這個世界的意義是什麼？', '我是誰？']
+                };
+                
+                const thought = thoughts[action][Math.floor(Math.random() * thoughts[action].length)];
+                
+                return { action, thought };
+            }
+            
+            async update() {
+                if (this.energy <= 0) {
+                    this.mood = 'tired';
+                    return;
+                }
+                
+                // 思考下一步行動
+                const decision = await this.think();
+                
+                // 執行行動
+                switch(decision.action) {
+                    case 'explore':
+                        this.explore();
+                        break;
+                    case 'rest':
+                        this.rest();
+                        break;
+                    case 'socialize':
+                        this.socialize();
+                        break;
+                    case 'eat':
+                        this.eat();
+                        break;
+                    default:
+                        this.wander();
+                }
+                
+                // 顯示思考內容
+                if (decision.thought && Math.random() > 0.7) {
+                    this.speak(decision.thought);
+                }
+                
+                // 更新能量
+                this.energy = Math.max(0, this.energy - 0.5);
+                
+                // 更新顯示
+                this.updateDisplay();
+            }
+            
+            explore() {
+                this.targetX = Math.random() * 2800 + 100;
+                this.targetY = Math.random() * 1800 + 100;
+                this.mood = 'curious';
+                this.lastAction = 'exploring';
+            }
+            
+            rest() {
+                this.energy = Math.min(100, this.energy + 5);
+                this.mood = 'happy';
+                this.lastAction = 'resting';
+            }
+            
+            socialize() {
+                // 找最近的其他 agent
+                const nearbyAgent = this.findNearbyAgent();
+                if (nearbyAgent) {
+                    this.targetX = nearbyAgent.x;
+                    this.targetY = nearbyAgent.y;
+                    this.mood = 'happy';
+                    
+                    // 建立關係
+                    if (!this.relationships[nearbyAgent.id]) {
+                        this.relationships[nearbyAgent.id] = 0;
+                    }
+                    this.relationships[nearbyAgent.id]++;
+                    
+                    gameState.interactions++;
+                    addEventLog(`${this.name} 與 ${nearbyAgent.name} 互動`, 'social');
+                }
+                this.lastAction = 'socializing';
+            }
+            
+            eat() {
+                const terrain = this.getCurrentTerrain();
+                if (terrain === TERRAIN_TYPES.GRASS || terrain === TERRAIN_TYPES.FOREST) {
+                    this.energy = Math.min(100, this.energy + 10);
+                    this.mood = 'happy';
+                    addEventLog(`${this.name} 找到了食物`, 'action');
+                }
+                this.lastAction = 'eating';
+            }
+            
+            wander() {
+                const dx = (Math.random() - 0.5) * 100;
+                const dy = (Math.random() - 0.5) * 100;
+                this.targetX = Math.max(50, Math.min(2950, this.x + dx));
+                this.targetY = Math.max(50, Math.min(1950, this.y + dy));
+                this.lastAction = 'wandering';
+            }
+            
+            findNearbyAgent() {
+                let nearest = null;
+                let minDist = Infinity;
+                
+                for (const agent of gameState.agents) {
+                    if (agent.id === this.id) continue;
+                    
+                    const dist = Math.sqrt(
+                        Math.pow(agent.x - this.x, 2) + 
+                        Math.pow(agent.y - this.y, 2)
+                    );
+                    
+                    if (dist < minDist && dist < 300) {
+                        minDist = dist;
+                        nearest = agent;
+                    }
+                }
+                
+                return nearest;
+            }
+            
+            getCurrentTerrain() {
+                const x = Math.floor(this.x / 100);
+                const y = Math.floor(this.y / 100);
+                return gameState.terrainMap[y]?.[x] || TERRAIN_TYPES.GRASS;
+            }
+            
+            speak(message) {
+                const bubble = document.createElement('div');
+                bubble.className = 'speech-bubble absolute bg-white text-black p-2 rounded-lg text-xs max-w-xs z-30';
+                bubble.style.left = `${this.x + 20}px`;
+                bubble.style.top = `${this.y - 30}px`;
+                bubble.textContent = message;
+                
+                document.getElementById('worldMap').appendChild(bubble);
+                
+                setTimeout(() => bubble.remove(), 3000);
+                
+                addEventLog(`${this.name}: "${message}"`, 'speech');
+            }
+            
+            move() {
+                const speed = 5 * gameState.speed;
+                const dx = this.targetX - this.x;
+                const dy = this.targetY - this.y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                
+                if (dist > speed) {
+                    this.x += (dx / dist) * speed;
+                    this.y += (dy / dist) * speed;
+                    
+                    if (this.element) {
+                        this.element.style.left = `${this.x}px`;
+                        this.element.style.top = `${this.y}px`;
+                    }
+                }
+            }
+            
+            updateDisplay() {
+                if (!this.element) return;
+                
+                const emoji = this.element.querySelector('.text-2xl');
+                if (emoji) emoji.textContent = this.getEmoji();
+                
+                const energy = this.element.querySelector('.bg-green-500');
+                if (energy) {
+                    energy.textContent = Math.floor(this.energy);
+                    if (this.energy < 30) {
+                        energy.classList.remove('bg-green-500');
+                        energy.classList.add('bg-red-500');
+                    }
+                }
+            }
+            
+            showDetails() {
+                const details = `
+                    名稱: ${this.name}
+                    模型: ${this.model}
+                    能量: ${Math.floor(this.energy)}
+                    心情: ${this.mood}
+                    最後行動: ${this.lastAction}
+                    記憶數: ${this.memory.length}
+                    關係數: ${Object.keys(this.relationships).length}
+                `;
+                alert(details);
+            }
+            
+            buildPrompt() {
+                const terrain = this.getCurrentTerrain();
+                const nearbyAgent = this.findNearbyAgent();
+                
+                return `
+                    你是 ${this.name}，一個在虛擬世界中的 AI 生命體。
+                    ${this.personality ? `你的個性：${this.personality}` : ''}
+                    
+                    當前狀態：
+                    - 能量：${this.energy}
+                    - 心情：${this.mood}
+                    - 位置地形：${terrain.name}
+                    - 附近有其他生命體：${nearbyAgent ? nearbyAgent.name : '無'}
+                    
+                    請決定你的下一個行動和想法。
+                `;
+            }
+        }
+
+        // 添加事件日誌
+        function addEventLog(message, type = 'info') {
+            const log = document.getElementById('eventLog');
+            const entry = document.createElement('div');
+            entry.className = `p-2 rounded ${
+                type === 'system' ? 'bg-blue-900' :
+                type === 'social' ? 'bg-purple-900' :
+                type === 'action' ? 'bg-green-900' :
+                type === 'speech' ? 'bg-gray-700' :
+                'bg-gray-800'
+            }`;
+            
+            const time = new Date().toLocaleTimeString();
+            entry.innerHTML = `
+                <div class="text-xs text-gray-400">${time}</div>
+                <div>${message}</div>
+            `;
+            
+            log.insertBefore(entry, log.firstChild);
+            
+            // 保持日誌數量
+            while (log.children.length > 50) {
+                log.removeChild(log.lastChild);
+            }
+        }
+
+        // 更新統計
+        function updateStats() {
+            document.getElementById('population').textContent = gameState.agents.length;
+            document.getElementById('interactions').textContent = gameState.interactions;
+            document.getElementById('worldTime').textContent = `Day ${Math.floor(gameState.worldTime)}`;
+        }
+
+        // 添加新 Agent
+        function addAgent() {
+            const name = document.getElementById('agentName').value || `Agent-${gameState.agents.length + 1}`;
+            const model = document.getElementById('modelSelect').value;
+            const personality = document.getElementById('agentPersonality').value;
+            
+            const agent = new AIAgent(name, model, personality);
+            agent.createElement();
+            gameState.agents.push(agent);
+            
+            // 更新 UI
+            updateAgentsList();
+            updateStats();
+            
+            // 清空輸入
+            document.getElementById('agentName').value = '';
+            document.getElementById('agentPersonality').value = '';
+            
+            addEventLog(`${name} 加入了世界`, 'system');
+        }
+
+        // 更新 Agents 列表
+        function updateAgentsList() {
+            const list = document.getElementById('agentsList');
+            list.innerHTML = '';
+            
+            gameState.agents.forEach(agent => {
+                const item = document.createElement('div');
+                item.className = 'p-2 bg-gray-700 rounded flex justify-between items-center';
+                item.innerHTML = `
+                    <div>
+                        <div class="font-semibold">${agent.name}</div>
+                        <div class="text-xs text-gray-400">${agent.model}</div>
+                    </div>
+                    <button onclick="removeAgent('${agent.id}')" 
+                            class="text-red-400 hover:text-red-300">
+                        ❌
+                    </button>
+                `;
+                list.appendChild(item);
+            });
+        }
+
+        // 移除 Agent
+        function removeAgent(id) {
+            const index = gameState.agents.findIndex(a => a.id == id);
+            if (index !== -1) {
+                const agent = gameState.agents[index];
+                if (agent.element) {
+                    agent.element.remove();
+                }
+                gameState.agents.splice(index, 1);
+                updateAgentsList();
+                updateStats();
+                addEventLog(`${agent.name} 離開了世界`, 'system');
+            }
+        }
+
+        // 遊戲循環
+        function gameLoop() {
+            if (!gameState.isPaused) {
+                // 更新所有 agents
+                gameState.agents.forEach(agent => {
+                    agent.move();
+                    if (Math.random() < 0.1) { // 10% 機率執行思考
+                        agent.update();
+                    }
+                });
+                
+                // 更新世界時間
+                gameState.worldTime += 0.01 * gameState.speed;
+                updateStats();
+            }
+            
+            requestAnimationFrame(gameLoop);
+        }
+
+        // 初始化事件監聽器
+        document.addEventListener('DOMContentLoaded', () => {
+            initWorld();
+            
+            // 添加 Agent 按鈕
+            document.getElementById('addAgentBtn').addEventListener('click', addAgent);
+            
+            // 暫停按鈕
+            document.getElementById('pauseBtn').addEventListener('click', () => {
+                gameState.isPaused = !gameState.isPaused;
+                document.getElementById('pauseBtn').innerHTML = gameState.isPaused ? 
+                    '▶️ 繼續' : '⏸️ 暫停';
+            });
+            
+            // 速度按鈕
+            document.getElementById('speedBtn').addEventListener('click', () => {
+                gameState.speed = gameState.speed === 1 ? 2 : gameState.speed === 2 ? 5 : 1;
+                document.getElementById('speedBtn').innerHTML = `⚡ 速度: ${gameState.speed}x`;
+            });
+            
+            // API 設定
+            document.getElementById('apiKey').addEventListener('change', (e) => {
+                gameState.apiKey = e.target.value;
+            });
+            
+            document.getElementById('apiProvider').addEventListener('change', (e) => {
+                gameState.apiProvider = e.target.value;
+                if (e.target.value === 'demo') {
+                    addEventLog('切換到 Demo 模式 - 無需 API Key', 'system');
+                }
+            });
+            
+            // 自動添加幾個示範 Agent
+            setTimeout(() => {
+                const demoAgents = [
+                    { name: '探索者', model: 'gpt-4', personality: '好奇、勇敢' },
+                    { name: '思考者', model: 'claude-3', personality: '哲學、深思' },
+                    { name: '社交家', model: 'gemini-pro', personality: '友善、外向' }
+                ];
+                
+                demoAgents.forEach((config, index) => {
+                    setTimeout(() => {
+                        document.getElementById('agentName').value = config.name;
+                        document.getElementById('modelSelect').value = config.model;
+                        document.getElementById('agentPersonality').value = config.personality;
+                        addAgent();
+                    }, index * 500);
+                });
+            }, 1000);
+            
+            // 開始遊戲循環
+            gameLoop();
+        });
+    </script>
+</body>
+  </html>
