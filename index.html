@@ -717,49 +717,84 @@
         // 修改 trackWithLangfuse 函數
         async function trackWithLangfuse(agent, action, prompt, response, cost) {
             try {
-                const modelInfo = ALL_MODELS.find(m => m.id === agent.model);
+                const traceId = `trace-${agent.id}-${Date.now()}`;
+                const generationId = `gen-${Date.now()}`;
                 
-                const payload = {
-                    agentId: agent.id,
-                    agentName: agent.name,
-                    model: agent.model,
-                    action: action,
-                    prompt: prompt,
-                    response: response,
-                    cost: cost,
-                    metadata: {
-                        health: agent.health,
-                        hunger: agent.hunger,
-                        thirst: agent.thirst,
-                        energy: agent.energy,
-                        mood: agent.mood,
-                        gameDay: gameState.currentDay,
-                        gameHour: gameState.currentHour,
-                        vendor: modelInfo?.vendor || 'Unknown'
+                // 建構 Langfuse events
+                const events = [
+                    {
+                        id: traceId,
+                        type: "trace",
+                        timestamp: new Date().toISOString(),
+                        body: {
+                            id: traceId,
+                            name: `AI Decision - ${agent.name}`,
+                            userId: agent.id,
+                            metadata: {
+                                agentName: agent.name,
+                                model: agent.model,
+                                action: action,
+                                gameDay: gameState.currentDay,
+                                gameHour: gameState.currentHour
+                            },
+                            tags: [action, agent.mood, ALL_MODELS.find(m => m.id === agent.model)?.vendor || 'Unknown']
+                        }
+                    },
+                    {
+                        id: generationId,
+                        type: "generation",
+                        timestamp: new Date().toISOString(),
+                        body: {
+                            id: generationId,
+                            traceId: traceId,
+                            name: action,
+                            model: agent.model,
+                            modelParameters: {
+                                temperature: 0.8,
+                                maxTokens: 150
+                            },
+                            input: prompt,
+                            output: response,
+                            usage: {
+                                promptTokens: Math.ceil(prompt.length / 4),
+                                completionTokens: Math.ceil(response.length / 4),
+                                totalTokens: Math.ceil((prompt.length + response.length) / 4)
+                            },
+                            metadata: {
+                                health: agent.health,
+                                hunger: agent.hunger,
+                                thirst: agent.thirst,
+                                energy: agent.energy,
+                                mood: agent.mood,
+                                estimatedCost: cost
+                            }
+                        }
                     }
-                };
+                ];
 
-                const response_api = await fetch("langfuse-proxy.guan0514.workers.dev", {
-                  method: "POST",
-                  headers: {
-                    "Content-Type": "application/json",
-                  },
-                  body: JSON.stringify({
-                    batch: events,
-                    metadata: {
-                      sdk_name: "ai-ecosystem-simulator",
-                      sdk_version: "1.0.0"
-                    }
-                  })
+                // 發送到 Cloudflare Worker Proxy
+                const response_api = await fetch("https://langfuse-proxy.guan0514.workers.dev", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({
+                        batch: events,
+                        metadata: {
+                            sdk_name: "ai-ecosystem-simulator",
+                            sdk_version: "1.0.0"
+                        }
+                    })
                 });
                 
-                if (apiResponse.ok) {
-                    const result = await apiResponse.json();
+                if (response_api.ok) {
+                    const result = await response_api.json();
                     console.log('✅ Langfuse 追踪成功:', result);
                     
                     // 存儲在本地
                     if (!agent.langfuseTraces) agent.langfuseTraces = [];
                     agent.langfuseTraces.push({
+                        traceId: traceId,
                         timestamp: new Date().toISOString(),
                         action: action,
                         prompt: prompt,
@@ -767,12 +802,14 @@
                         cost: cost
                     });
                 } else {
-                    const errorText = await apiResponse.text();
-                    console.error('❌ Langfuse API 錯誤:', apiResponse.status, errorText);
+                    const errorText = await response_api.text();
+                    console.error('❌ Langfuse API 錯誤:', response_api.status, errorText);
+                    addEventLog(`❌ Langfuse 追踪失敗: ${errorText}`, 'system');
                 }
                 
             } catch (error) {
                 console.error('❌ Langfuse tracking failed:', error);
+                addEventLog(`❌ Langfuse 錯誤: ${error.message}`, 'system');
             }
         }
 
@@ -1862,18 +1899,6 @@ ${this.personality ? `個性：${this.personality}` : ''}
                 gameState.apiKey = e.target.value;
             });
             
-            // Langfuse 設定 - 自動載入預設值
-            gameState.langfuseKey = document.getElementById('langfuseKey').value;
-            gameState.langfuseUrl = document.getElementById('langfuseUrl').value;
-            
-            document.getElementById('langfuseKey').addEventListener('change', (e) => {
-                gameState.langfuseKey = e.target.value;
-            });
-            
-            document.getElementById('langfuseUrl').addEventListener('change', (e) => {
-                gameState.langfuseUrl = e.target.value;
-            });
-            
             // 測試 Stima API 連線
             document.getElementById('testApiBtn').addEventListener('click', async () => {
                 if (!gameState.apiKey) {
@@ -1899,19 +1924,31 @@ ${this.personality ? `個性：${this.personality}` : ''}
                 }
             });
             
-            // 測試 Langfuse 連線
+            // 測試 Langfuse 連線（測試 Proxy）
             document.getElementById('testLangfuseBtn').addEventListener('click', async () => {
-                if (!gameState.langfuseKey || !gameState.langfuseUrl) {
-                    alert('請先輸入 Langfuse 設定');
-                    return;
-                }
-                
                 try {
-                    // 這裡應該測試 Langfuse API
-                    alert('✅ Langfuse 設定已保存（實際測試需要後端支持）');
-                    addEventLog('✅ Langfuse 設定已保存', 'system');
+                    // 發送一個測試事件到 Proxy
+                    const testResponse = await fetch("https://langfuse-proxy.guan0514.workers.dev", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                            batch: [{
+                                id: "test-trace",
+                                type: "trace",
+                                body: { name: "Test Trace" }
+                            }],
+                            metadata: { sdk_name: "test" }
+                        })
+                    });
+                    
+                    if (testResponse.ok) {
+                        alert('✅ Langfuse Proxy 連線成功！');
+                        addEventLog('✅ Langfuse Proxy 測試成功', 'system');
+                    } else {
+                        alert('❌ Langfuse Proxy 連線失敗：' + testResponse.status);
+                    }
                 } catch (error) {
-                    alert('❌ Langfuse 設定錯誤：' + error.message);
+                    alert('❌ 連線錯誤：' + error.message);
                 }
             });
             
